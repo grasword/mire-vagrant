@@ -1,0 +1,113 @@
+---
+- name: Add Puppet repository keys
+  hosts: all
+  become: yes
+  tasks:
+      - name: Add Puppet repository keys
+        shell: |
+          curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x4528B6CD9E61EF26" | sudo gpg --dearmor -o /etc/apt/keyrings/key.gpg
+
+      - name: Add Puppet repository
+        shell: |
+          echo "deb [signed-by=/etc/apt/keyrings/key.gpg] https://apt.puppet.com jammy puppet8" | sudo tee /etc/apt/sources.list.d/puppet.list
+
+      - name: Update apt cache
+        apt:
+          update_cache: yes
+
+        # curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x4528B6CD9E61EF26" | sudo gpg --dearmor -o /etc/apt/keyrings/key.gpg
+        # echo "deb [signed-by=/etc/apt/keyrings/key.gpg] https://apt.puppet.com jammy puppet8" | sudo tee /etc/apt/sources.list.d/puppet.list
+        # ensure that this file is present in /etc/apt/sources.list.d/puppet.list
+
+- name: Install Puppet Server
+  hosts: control
+  become: yes
+  tasks:
+    - name: Install Puppet Server
+      apt:
+        name: puppetserver
+        state: present
+        update_cache: yes
+
+    - name: Configure Puppet Server
+      lineinfile:
+        path: /etc/default/puppetserver
+        regexp: '^JAVA_ARGS='
+        line: 'JAVA_ARGS="-Xms512m -Xmx512m"'
+      notify: Restart Puppet Server
+
+    - name: Install Puppet Docker module
+      command: /opt/puppetlabs/bin/puppet module install puppetlabs-docker
+
+    - name: Copy Docker install manifest
+      copy:
+        src: /home/vagrant/install_docker.pp
+        dest: /etc/puppetlabs/code/environments/production/manifests/install_docker.pp
+
+    - name: Start and enable Puppet Server service
+      service:
+        name: puppetserver
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart Puppet Server
+      service:
+        name: puppetserver
+        state: restarted
+
+- name: Install Puppet Agent
+  hosts: all:!control
+  become: yes
+  tasks:
+    - name: Install Puppet Agent
+      apt:
+        name: puppet-agent
+        state: present
+        update_cache: yes
+
+    - name: Configure Puppet Agent
+      lineinfile:
+        path: /etc/puppetlabs/puppet/puppet.conf
+        regexp: '^server\s*='
+        line: 'server = puppet'
+      notify: Restart Puppet Agent
+      # cat /etc/puppetlabs/puppet/puppet.conf
+      # dns_alt_names = puppet,puppet.local
+      # --debug --trace
+      # sudo strace
+
+    - name: Start and enable Puppet Agent service
+      service:
+        name: puppet
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart Puppet Agent
+      service:
+        name: puppet
+        state: restarted
+
+- name: Sign Puppet Agent certificate
+  hosts: control
+  become: yes
+  tasks:
+    - name: Wait for Puppet Agent certificate request
+      wait_for:
+        timeout: 60
+
+    - name: Sign Puppet Agent certificate
+      command: /opt/puppetlabs/bin/puppetserver ca sign --all
+      become: yes
+
+    - name: Check if Puppet Agent certificates are signed
+      command: /opt/puppetlabs/bin/puppetserver ca list --all
+      register: cert_list
+      become: yes
+
+    - name: Display signed certificates
+      debug:
+        msg: "{{ cert_list.stdout_lines }}"
+
+# sudo puppet agent --test --verbose
