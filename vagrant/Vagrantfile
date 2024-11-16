@@ -1,0 +1,70 @@
+Vagrant.configure("2") do |config|
+  # Base box configuration
+  config.vm.box = "bento/ubuntu-22.04"
+
+  # Provider configuration
+  config.vm.provider "vmware_desktop" do |v|
+    v.allowlist_verified = true
+    v.memory = 1024
+    v.cpus = 2
+    v.gui = false
+  end
+
+  # Network configuration
+  ips = {
+    control: "192.168.33.10",
+    worker0: "192.168.33.11"
+  }
+
+  # Provisioning configuration
+  config.vm.provision "shell", inline: <<-SHELL
+    echo "#{ips[:control]} control puppet" >> /etc/hosts
+    echo "#{ips[:worker0]} worker0" >> /etc/hosts
+  SHELL
+
+  # worker0 configuration
+  config.vm.define "worker0" do |worker0|
+    worker0.vm.hostname = "worker0"
+    worker0.vm.network "private_network", ip: ips[:worker0]
+  end
+
+  # Control worker configuration
+  config.vm.define "control" do |control|
+    control.vm.hostname = "control"
+    control.vm.network "private_network", ip: ips[:control]
+    control.vm.provision "shell", inline: <<-SHELL
+      sudo apt-add-repository --yes --update ppa:ansible/ansible
+      sudo apt-get update
+      sudo apt-get install -y software-properties-common
+      sudo apt-get install -y ansible
+    SHELL
+    control.vm.provision "shell", inline: <<-SHELL
+      echo "[control]" >> /etc/ansible/hosts
+      echo "#{ips[:control]}" >> /etc/ansible/hosts
+      echo "[worker0]" >> /etc/ansible/hosts
+      echo "#{ips[:worker0]}" >> /etc/ansible/hosts
+      echo "[all:vars]" >> /etc/ansible/hosts
+      echo "ansible_user=vagrant" >> /etc/ansible/hosts
+      echo "ansible_ssh_pass=vagrant" >> /etc/ansible/hosts
+
+      echo "[defaults]" >> /etc/ansible/ansible.cfg
+      echo "host_key_checking = false" >> /etc/ansible/ansible.cfg
+    SHELL
+    control.vm.provision "file", source: "install_puppet.yml", destination: "/home/vagrant/install_puppet.yml"
+    control.vm.provision "file", source: "install_docker.pp", destination: "/home/vagrant/install_docker.pp"
+    control.vm.provision "shell", inline: <<-SHELL
+      ansible-playbook /home/vagrant/install_puppet.yml
+    SHELL
+  end
+end
+
+# ancible Inventory of servers
+# control
+# Chef
+# puppet
+
+# Ansible control
+# Ansible Playbook
+# Puppet server  > Puppet repository > Puppet installation > https://www.puppet.com/docs/puppet/8/server/install_from_packages
+
+# Pre-generate ssh key before and then copy the public key to the other servers
