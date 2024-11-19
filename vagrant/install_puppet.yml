@@ -39,10 +39,13 @@
     - name: Install Puppet Docker module
       command: /opt/puppetlabs/bin/puppet module install puppetlabs-docker
 
-    - name: Copy Docker install manifest
+    - name: Install Puppet VCSRepo module
+      command: /opt/puppetlabs/bin/puppet module install puppetlabs-vcsrepo
+
+    - name: Copy manifests
       copy:
-        src: /home/vagrant/install_docker.pp
-        dest: /etc/puppetlabs/code/environments/production/manifests/install_docker.pp
+        src: /home/vagrant/docker_app_setup.pp
+        dest: /etc/puppetlabs/code/environments/production/manifests/docker_app_setup.pp
 
     - name: Start and enable Puppet Server service
       service:

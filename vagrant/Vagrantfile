@@ -51,7 +51,7 @@ Vagrant.configure("2") do |config|
       echo "host_key_checking = false" >> /etc/ansible/ansible.cfg
     SHELL
     control.vm.provision "file", source: "install_puppet.yml", destination: "/home/vagrant/install_puppet.yml"
-    control.vm.provision "file", source: "install_docker.pp", destination: "/home/vagrant/install_docker.pp"
+    control.vm.provision "file", source: "docker_app_setup.pp", destination: "/home/vagrant/docker_app_setup.pp"
     control.vm.provision "shell", inline: <<-SHELL
       ansible-playbook /home/vagrant/install_puppet.yml
     SHELL
